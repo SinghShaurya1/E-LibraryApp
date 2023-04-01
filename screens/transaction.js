@@ -60,6 +60,7 @@ export default class TransactionScreen extends React.Component {
 
   getBookData = async (bookId) => {
     bookId = bookId.trim();
+    console.log(bookId);
     db.collection('books')
       .where('bookId', '==', bookId)
       .get()
@@ -70,18 +71,23 @@ export default class TransactionScreen extends React.Component {
           });
         });
       });
+    console.log(this.state.bookName);
   };
 
   isBookAvailable = async (bookId) => {
-    const bookRef = db.collection('books').where('bookId', '==', bookId).get();
+    const bookRef = await db
+      .collection('books')
+      .where('bookId', '==', bookId)
+      .get();
     var transactionType = '';
     if (bookRef.docs.length == 0) {
       transactionType = false;
     } else {
       bookRef.docs.map((doc) => {
-        transactionType = doc.data().isAvailable ? 'issue' : 'return';
+        transactionType = doc.data.isAvailable ? 'issue' : 'return';
       });
     }
+    console.log(transactionType);
     return transactionType;
   };
 
@@ -97,6 +103,7 @@ export default class TransactionScreen extends React.Component {
           });
         });
       });
+    console.log(this.state.studentName);
   };
 
   bookIssue = async (bookId, studentId, bookName, studentName) => {
@@ -122,6 +129,33 @@ export default class TransactionScreen extends React.Component {
     });
   };
 
+  checkStudentElgiblityForReturn = async (bookId, studentId) => {
+    const transactionRef = await db
+      .collection('transactions')
+      .where('bookId', '==', bookId)
+      .limit(1)
+      .get();
+    var isStudentEligible = '';
+    transactionRef.docs.map((doc) => {
+      var lastBookTransactions = doc.data();
+
+      if (lastBookTransactions.studentId == studentId) {
+        isStudentEligible = true;
+      } else {
+        isStudentEligible = false;
+        TOASTANDROID.show(
+          'this book is not issued by this student',
+          TOASTANDROID.SHORT
+        );
+        this.setState({
+          bookId: '',
+          studentId: '',
+        });
+      }
+    });
+    return isStudentEligible;
+  };
+
   checkStudentElgiblityForIssue = async (studentId) => {
     const studentRef = await db
       .collection('students')
@@ -137,7 +171,25 @@ export default class TransactionScreen extends React.Component {
         "the student id doesn't exists in data base",
         TOASTANDROID.SHORT
       );
+      isStudentEligible = false;
+    } else {
+      studentRef.docs.map((doc) => {
+        if (doc.data().issuedBooks < 2) {
+          isStudentEligible = true;
+        } else {
+          isStudentEligible = false;
+          ToastAndroid.show(
+            'the student already have 2 books',
+            ToastAndroid.SHORT
+          );
+          this.setState({
+            bookId: '',
+            studentId: '',
+          });
+        }
+      });
     }
+    return isStudentEligible;
   };
 
   bookReturn = (bookId, studentId, bookName, studentName) => {
@@ -165,10 +217,11 @@ export default class TransactionScreen extends React.Component {
 
   handleTransaction = async () => {
     var { bookId, studentId } = this.state;
+
     await this.getBookData(bookId);
     await this.getStudentDetails(studentId);
     var transactionType = await this.isBookAvailable(bookId);
-
+    console.log(transactionType);
     if (transactionType == false) {
       this.setState({
         bookId: '',
@@ -178,8 +231,24 @@ export default class TransactionScreen extends React.Component {
         "this book doesn't exists in data base",
         ToastAndroid.SHORT
       );
+      console.log("this book doesn't exists in data base");
     } else if (transactionType == 'issue') {
       var isElegible = await this.checkStudentElgiblityForIssue(studentId);
+      if (isElegible == true) {
+        var { bookName, studentName } = this.state;
+        this.bookIssue(bookId, studentId, bookName, studentName);
+        TOASTANDROID.show('book has been issued', TOASTANDROID.SHORT);
+      }
+    } else {
+      var isElegible = await this.checkStudentElgiblityForReturn(
+        bookId,
+        studentId
+      );
+      if (isElegible == true) {
+        var { bookName, studentName } = this.state;
+        this.bookReturn(bookId, studentId, bookName, studentName);
+        TOASTANDROID.show('book has been returned', TOASTANDROID.SHORT);
+      }
     }
 
     //doesn't
